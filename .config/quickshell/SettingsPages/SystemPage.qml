@@ -269,11 +269,10 @@ Item {
         running: true
         stdout: StdioCollector { onStreamFinished: page.cpu = text.trim() }
     }
-    Process {
-        id: pCpuUsage
-        command: ["sh", "-c", "head -1 /proc/stat"]
-        running: true
-        stdout: StdioCollector { onStreamFinished: page.updateCpuFromStat(text) }
+    FileView {
+        id: cpuStat
+        path: "/proc/stat"
+        onLoaded: page.updateCpuFromStat(text().split("\n")[0])
     }
     Process {
         id: pCpuTemp
@@ -304,11 +303,10 @@ Item {
         running: true
         stdout: StdioCollector { onStreamFinished: page.gpuTemp = page.formatTemp(text) }
     }
-    Process {
-        id: pMemory
-        command: ["sh", "-c", "grep -E '^(MemTotal|MemAvailable):' /proc/meminfo"]
-        running: true
-        stdout: StdioCollector { onStreamFinished: page.updateMemoryFromStat(text) }
+    FileView {
+        id: memInfo
+        path: "/proc/meminfo"
+        onLoaded: page.updateMemoryFromStat(text())
     }
 
     Process {
@@ -355,7 +353,7 @@ Item {
         repeat: true
         onTriggered: {
             page.updateClock()
-            pCpuUsage.running = true
+            cpuStat.reload()
             pCpuTemp.running = true
             pGpuUsage.running = true
             pGpuTemp.running = true
@@ -366,7 +364,7 @@ Item {
         interval: 2000
         running: true
         repeat: true
-        onTriggered: pMemory.running = true
+        onTriggered: memInfo.reload()
     }
 
     Timer {
@@ -378,6 +376,8 @@ Item {
 
     Component.onCompleted: {
         page.updateClock()
+        cpuStat.reload()
+        memInfo.reload()
         pRamSpeed.running = true
         pCpuTemp.running = true
         pGpuTemp.running = true

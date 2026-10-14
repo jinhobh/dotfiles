@@ -5,8 +5,37 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
-PanelWindow {
+Scope {
     id: root
+
+    // ---- lifecycle -------------------------------------------------------
+    property bool showing: false      // logical "menu is open"
+    property bool mounted: false      // window exists
+    property var targetScreen: Quickshell.screens[0]
+    property real winW: 0             // reported by the window while mounted
+    property real winH: 0
+
+    onShowingChanged: {
+        if (showing) {
+            unmountTimer.stop()
+            mounted = true
+        } else {
+            unmountTimer.restart()
+        }
+    }
+
+    // must be longer than the longest fade-out (panel opacity = 180ms)
+    Timer {
+        id: unmountTimer
+        interval: 300
+        onTriggered: {
+            root.mounted = false
+            root.winW = 0
+            root.winH = 0
+        }
+    }
+
+    // ---- layout -----------------------------------------------------------
     property int topGap: 12
     property int sideGap: 24
     property int edgeGap: 0
@@ -31,7 +60,6 @@ PanelWindow {
     readonly property int defaultSpacing: 8
     property int itemSpacing: defaultSpacing
 
-    property bool showing: false
     property bool settingsOpen: false
     property bool dragging: false
     property int currentIndex: 0
@@ -44,11 +72,11 @@ PanelWindow {
     readonly property int maxSize: 160
     readonly property int defaultSize: 100
     property int menuSize: defaultSize
-    property string icon: ""
-    readonly property int iconRes: 128
-    readonly property bool lightMode: Theme._bgBase.hslLightness > 0.5
 
-    Component.onCompleted: BluetoothState.init()
+    // icons are drawn at 20x20; 48 keeps them sharp on HiDPI without
+    // decoding 128x128 textures
+    readonly property int iconRes: 48
+    readonly property bool lightMode: Theme._bgBase.hslLightness > 0.5
 
     readonly property bool movedFromDefault: offsetX !== 0 || offsetY !== 0 || horizontal
         || menuSize !== defaultSize
@@ -59,18 +87,10 @@ PanelWindow {
     readonly property string iconDir: "file://" + Quickshell.env("HOME") + "/.config/quickshell/imgs/"
     readonly property string statePath: Quickshell.env("HOME") + "/.config/quickshell/state/powermenu-state.json"
 
-    anchors { top: true; bottom: true; left: true; right: true }
-    color: "transparent"
-    exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "powermenu"
-    WlrLayershell.keyboardFocus: root.showing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-
-    mask: Region { item: root.showing ? menuRoot : null }
-
     onMenuSizeChanged: if (root.showing) root.setPosition(root.offsetX, root.offsetY)
     onCardWidthChanged: if (root.showing) root.setPosition(root.offsetX, root.offsetY)
 
+    // ---- small reusable components ---------------------------------------
     component FooterButton: Rectangle {
         id: fb
         property string label: ""
@@ -165,6 +185,7 @@ PanelWindow {
         }
     }
 
+    // ---- actions ----------------------------------------------------------
     readonly property var actions: [
         { name: "shutdown",  label: "Shut down", icon: "shutdown.png",  key: "s", cmd: ["systemctl", "poweroff"] },
         { name: "reboot",    label: "Reboot",    icon: "reboot.png",    key: "r", cmd: ["systemctl", "reboot"] },
@@ -198,18 +219,12 @@ PanelWindow {
         var mon = Hyprland.focusedMonitor
         if (mon) {
             var scr = Quickshell.screens.find(function (s) { return s.name === mon.name })
-            if (scr) root.screen = scr
+            if (scr) root.targetScreen = scr
         }
         currentIndex = 0
         settingsOpen = false
         dragging = false
-        showing = true
-        Qt.callLater(function () {
-            if (root.showing) {
-                menuRoot.forceActiveFocus()
-                root.setPosition(root.offsetX, root.offsetY)
-            }
-        })
+        showing = true   // onShowingChanged mounts the window
     }
 
     function closeMenu() { showing = false; settingsOpen = false; dragging = false }
@@ -285,21 +300,22 @@ PanelWindow {
     // keeping at least `keepVisible` px on screen. Top is kept on screen so the
     // drag handle always stays reachable.
     function setPosition(x, y) {
-        if (root.width <= 0 || root.height <= 0) {
+        if (root.winW <= 0 || root.winH <= 0) {
             root.offsetX = x
             root.offsetY = y
             return
         }
         var s = root.menuSize / 100
         var kv = root.keepVisible
-        var minX = kv - root.width + root.sideGap
+        var minX = kv - root.winW + root.sideGap
         var maxX = root.sideGap + root.cardWidth * s - kv
         var minY = root.edgeGap - root.topGap
-        var maxY = Math.max(minY, root.height - kv - root.topGap)
+        var maxY = Math.max(minY, root.winH - kv - root.topGap)
         root.offsetX = Math.max(minX, Math.min(maxX, x))
         root.offsetY = Math.max(minY, Math.min(maxY, y))
     }
 
+    // ---- always-on services (cheap) --------------------------------------
     IpcHandler {
         target: "powermenu"
         function toggle(): void { root.toggleMenu() }
@@ -339,398 +355,446 @@ PanelWindow {
         }
     }
 
-    Item {
-        id: menuRoot
-        anchors.fill: parent
-        focus: true
-        Keys.onPressed: function (event) {
-            if (!root.showing) return
-            if (root.settingsOpen) {
-                if (event.key === Qt.Key_Escape
-                        || event.key === Qt.Key_Return
-                        || event.key === Qt.Key_Enter
-                        || event.text.toLowerCase() === "c") {
-                    root.settingsOpen = false
-                    root.dragging = false
-                }
-                event.accepted = true
-                return
-            }
-            if (event.key === Qt.Key_Escape) {
-                root.closeMenu()
-                event.accepted = true
-                return
-            }
-            if (event.key === Qt.Key_Down
-                    || event.key === Qt.Key_Right
-                    || event.key === Qt.Key_Tab) {
-                root.currentIndex = (root.currentIndex + 1) % root.visibleActions.length
-                event.accepted = true
-                return
-            }
-            if (event.key === Qt.Key_Up
-                    || event.key === Qt.Key_Left
-                    || event.key === Qt.Key_Backtab) {
-                root.currentIndex = (root.currentIndex - 1 + root.visibleActions.length) % root.visibleActions.length
-                event.accepted = true
-                return
-            }
-            if (event.key === Qt.Key_Return
-                    || event.key === Qt.Key_Enter
-                    || event.key === Qt.Key_Space) {
-                root.runAction(root.visibleActions[root.currentIndex])
-                event.accepted = true
-                return
-            }
-            if (event.text.toLowerCase() === "c") {
-                root.settingsOpen = true
-                root.dragging = false
-                event.accepted = true
-                return
-            }
-            for (var i = 0; i < root.visibleActions.length; i++) {
-                if (event.text.toLowerCase() === root.visibleActions[i].key) {
-                    root.runAction(root.visibleActions[i])
-                    event.accepted = true
-                    return
-                }
-            }
-        }
-        MouseArea {
-            anchors.fill: parent
-            onClicked: root.settingsOpen ? root.settingsOpen = false : root.closeMenu()
-        }
-        Rectangle {
-            id: panel
-            width: root.cardWidth
-            height: panelCol.height + 2 * root.pad
-            radius: 20
+    // ---- the window: only exists while mounted ---------------------------
+    LazyLoader {
+        active: root.mounted
+
+        PanelWindow {
+            id: win
+            screen: root.targetScreen
+
+            // The window is created with showing already true, so a plain
+            // `opacity: root.showing ? 1 : 0` would pop in without a fade.
+            // `reveal` starts false and is bound to `showing` one tick later.
+            property bool reveal: false
+
+            anchors { top: true; bottom: true; left: true; right: true }
             color: "transparent"
-            transformOrigin: Item.TopRight
-            scale: root.menuSize / 100
-            anchors.top: parent.top
-            anchors.topMargin: root.topGap + root.offsetY
-            anchors.right: parent.right
-            anchors.rightMargin: root.sideGap - root.offsetX
-            opacity: root.showing ? 1 : 0
-            visible: opacity > 0
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "powermenu"
+            WlrLayershell.keyboardFocus: root.showing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-            Behavior on anchors.rightMargin {
-                enabled: !root.dragging && root.showing
-                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
-            }
-            Behavior on anchors.topMargin {
-                enabled: !root.dragging && root.showing
-                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
-            }
-            Behavior on scale {
-                enabled: root.showing
-                NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-            }
-            Behavior on opacity {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-            }
-            onHeightChanged: if (root.showing) root.setPosition(root.offsetX, root.offsetY)
-            MouseArea { anchors.fill: parent }
-            Column {
-                id: panelCol
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: root.pad
-                spacing: 6
+            mask: Region { item: root.showing ? menuRoot : null }
 
-                Item {
-                    id: header
-                    width: parent.width
-                    height: 12
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 36; height: 4; radius: 2
-                        color: Theme.bg
-                        opacity: (dragArea.containsMouse || root.dragging) ? 1 : 0.1
-                        Behavior on opacity { NumberAnimation { duration: 150 } }
-                    }
+            onWidthChanged: {
+                root.winW = width
+                if (root.showing) root.setPosition(root.offsetX, root.offsetY)
+            }
+            onHeightChanged: {
+                root.winH = height
+                if (root.showing) root.setPosition(root.offsetX, root.offsetY)
+            }
 
-                    MouseArea {
-                        id: dragArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton
-                        cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                        property real pressX: 0
-                        property real pressY: 0
-                        property real startX: 0
-                        property real startY: 0
-                        onPressed: function (mouse) {
-                            var p = dragArea.mapToItem(menuRoot, mouse.x, mouse.y)
-                            pressX = p.x
-                            pressY = p.y
-                            startX = root.offsetX
-                            startY = root.offsetY
-                            root.dragging = true
-                        }
-                        onPositionChanged: function (mouse) {
-                            if (!root.dragging) return
-                            var p = dragArea.mapToItem(menuRoot, mouse.x, mouse.y)
-                            root.setPosition(startX + (p.x - pressX), startY + (p.y - pressY))
-                        }
-                        onReleased: {
-                            if (!root.dragging) return
+            Component.onCompleted: {
+                menuRoot.forceActiveFocus()
+                root.setPosition(root.offsetX, root.offsetY)
+                Qt.callLater(function () {
+                    win.reveal = Qt.binding(function () { return root.showing })
+                })
+            }
+
+            Item {
+                id: menuRoot
+                anchors.fill: parent
+                focus: true
+                Keys.onPressed: function (event) {
+                    if (!root.showing) return
+                    if (root.settingsOpen) {
+                        if (event.key === Qt.Key_Escape
+                                || event.key === Qt.Key_Return
+                                || event.key === Qt.Key_Enter
+                                || event.text.toLowerCase() === "c") {
+                            root.settingsOpen = false
                             root.dragging = false
-                            root.saveState()
                         }
-                        onCanceled: {
-                            if (!root.dragging) return
-                            root.dragging = false
-                            root.saveState()
-                        }
-                        onDoubleClicked: root.resetPosition()
+                        event.accepted = true
+                        return
                     }
-                }
-
-                Column {
-                    visible: !root.settingsOpen
-                    width: parent.width
-                    spacing: root.itemSpacing
-                    Repeater {
-                        model: root.visibleActions
-                        delegate: Rectangle {
-                            id: entry
-                            required property var modelData
-                            required property int index
-                            readonly property bool focused: index === root.currentIndex
-
-                            width: parent.width
-                            height: root.itemHeight
-                            radius: 12
-                            color: entryArea.pressed || entryArea.containsMouse || entry.focused
-                            ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Math.min(1, Theme.bg.a + 0.12))
-                            : Theme.bg
-                            border.width: entry.focused ? 1 : 0
-                            border.color: Theme.accent
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            Rectangle {
-                                id: eThumb
-                                width: 32; height: 32; radius: 8
-                                anchors.left: parent.left
-                                anchors.leftMargin: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: "transparent"
-                                Image {
-                                    anchors.centerIn: parent
-                                    width: 20; height: 20
-                                    sourceSize: Qt.size(root.iconRes, root.iconRes)
-                                    fillMode: Image.PreserveAspectFit
-                                    smooth: true
-                                    mipmap: true
-                                    asynchronous: true
-                                    source: root.iconDir + root.iconFile(entry.modelData.icon)
-                                }
-                            }
-
-                            Text {
-                                anchors.left: eThumb.right
-                                anchors.leftMargin: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: entry.modelData.label
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: Theme.text
-                            }
-
-                            Rectangle {
-                                anchors.right: parent.right
-                                anchors.rightMargin: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 20; height: 20; radius: 6
-                                color: Theme.alpha(Theme.text, 0.08)
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: entry.modelData.key.toUpperCase()
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    color: Theme.textDim
-                                }
-                            }
-
-                            MouseArea {
-                                id: entryArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onEntered: root.currentIndex = entry.index
-                                onClicked: root.runAction(entry.modelData)
-                            }
-                        }
+                    if (event.key === Qt.Key_Escape) {
+                        root.closeMenu()
+                        event.accepted = true
+                        return
                     }
-
-                    Item {
-                        width: parent.width
-                        height: 16
-
-                        SizeControl {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            value: root.menuSize
-                            onStep: function (d) { root.stepSize(d) }
-                            onReset: root.resetSize()
-                        }
-
-                        FooterButton {
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            label: "󰒓"
-                            fontSize: 12
-                            textColor: Theme.textDim
-                            opacity: hovered ? 1 : 0.1
-                            onClicked: {
-                                root.settingsOpen = true
-                                root.dragging = false
-                            }
+                    if (event.key === Qt.Key_Down
+                            || event.key === Qt.Key_Right
+                            || event.key === Qt.Key_Tab) {
+                        root.currentIndex = (root.currentIndex + 1) % root.visibleActions.length
+                        event.accepted = true
+                        return
+                    }
+                    if (event.key === Qt.Key_Up
+                            || event.key === Qt.Key_Left
+                            || event.key === Qt.Key_Backtab) {
+                        root.currentIndex = (root.currentIndex - 1 + root.visibleActions.length) % root.visibleActions.length
+                        event.accepted = true
+                        return
+                    }
+                    if (event.key === Qt.Key_Return
+                            || event.key === Qt.Key_Enter
+                            || event.key === Qt.Key_Space) {
+                        root.runAction(root.visibleActions[root.currentIndex])
+                        event.accepted = true
+                        return
+                    }
+                    if (event.text.toLowerCase() === "c") {
+                        root.settingsOpen = true
+                        root.dragging = false
+                        event.accepted = true
+                        return
+                    }
+                    for (var i = 0; i < root.visibleActions.length; i++) {
+                        if (event.text.toLowerCase() === root.visibleActions[i].key) {
+                            root.runAction(root.visibleActions[i])
+                            event.accepted = true
+                            return
                         }
                     }
                 }
 
-                Column {
-                    visible: root.settingsOpen
-                    width: parent.width
-                    spacing: root.itemSpacing
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.settingsOpen ? root.settingsOpen = false : root.closeMenu()
+                }
 
-                    Repeater {
-                        model: root.actions
+                Rectangle {
+                    id: panel
+                    width: root.cardWidth
+                    height: panelCol.height + 2 * root.pad
+                    radius: 20
+                    color: "transparent"
+                    transformOrigin: Item.TopRight
+                    scale: root.menuSize / 100
+                    anchors.top: parent.top
+                    anchors.topMargin: root.topGap + root.offsetY
+                    anchors.right: parent.right
+                    anchors.rightMargin: root.sideGap - root.offsetX
+                    opacity: win.reveal ? 1 : 0
+                    visible: opacity > 0
 
-                        delegate: Rectangle {
-                            id: row
-                            required property var modelData
-                            readonly property bool on: root.hiddenNames.indexOf(modelData.name) < 0
-
-                            width: parent.width
-                            height: Math.max(36, root.itemHeight - 8)
-                            radius: 12
-                            color: Theme.alpha(
-                                Theme._bgBase,
-                                rowArea.containsMouse ? 0.9 : 0.8
-                            )
-                            Behavior on color { ColorAnimation { duration: 120 } }
-
-                            Rectangle {
-                                id: rThumb
-                                width: 32; height: 32; radius: 8
-                                anchors.left: parent.left
-                                anchors.leftMargin: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: "transparent"
-
-                                Image {
-                                    anchors.centerIn: parent
-                                    width: 20; height: 20
-                                    sourceSize: Qt.size(root.iconRes, root.iconRes)
-                                    fillMode: Image.PreserveAspectFit
-                                    smooth: true
-                                    mipmap: true
-                                    asynchronous: true
-                                    source: root.iconDir + root.iconFile(row.modelData.icon)
-                                    opacity: row.on ? 1 : 0.4
-                                }
-                            }
-
-                            Text {
-                                anchors.left: rThumb.right
-                                anchors.leftMargin: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: row.modelData.label
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: row.on ? Theme.text : Theme.textDim
-                            }
-
-                            Rectangle {
-                                anchors.right: parent.right
-                                anchors.rightMargin: 10
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 34; height: 18; radius: 9
-                                color: row.on ? Theme.accent : "transparent"
-                                border.width: 1
-                                border.color: row.on ? Theme.accent : Theme.alpha(Theme.text, 0.3)
-                                Behavior on color { ColorAnimation { duration: 150 } }
-
-                                Rectangle {
-                                    width: 12; height: 12; radius: 6
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    x: row.on ? parent.width - width - 3 : 3
-                                    color: row.on ? Theme.bg : Theme.text
-                                    Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
-                                }
-                            }
-
-                            MouseArea {
-                                id: rowArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: root.toggleAction(row.modelData.name)
-                            }
-                        }
+                    Behavior on anchors.rightMargin {
+                        enabled: !root.dragging && root.showing
+                        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                     }
+                    Behavior on anchors.topMargin {
+                        enabled: !root.dragging && root.showing
+                        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on scale {
+                        enabled: root.showing
+                        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on opacity {
+                        NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                    }
+                    onHeightChanged: if (root.showing) root.setPosition(root.offsetX, root.offsetY)
 
-                    // layout steppers
+                    MouseArea { anchors.fill: parent }
+
                     Column {
-                        width: parent.width
-                        spacing: 2
+                        id: panelCol
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: root.pad
+                        spacing: 6
 
-                        StepRow {
+                        Item {
+                            id: header
                             width: parent.width
-                            label: "Width"
-                            valueText: root.cardWidth + "px"
-                            onStep: function (dir) { root.stepWidth(dir) }
-                        }
-                        StepRow {
-                            width: parent.width
-                            label: "Height"
-                            valueText: root.itemHeight + "px"
-                            onStep: function (dir) { root.stepHeight(dir) }
-                        }
-                        StepRow {
-                            width: parent.width
-                            label: "Spacing"
-                            valueText: root.itemSpacing + "px"
-                            onStep: function (dir) { root.stepSpacing(dir) }
-                        }
-                    }
+                            height: 12
 
-                    Item {
-                        width: parent.width
-                        height: 16
-
-                        SizeControl {
-                            anchors.left: parent.left
-                            anchors.leftMargin: 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            value: root.menuSize
-                            onStep: function (d) { root.stepSize(d) }
-                            onReset: root.resetSize()
-                        }
-
-                        Row {
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 6
-
-                            FooterButton {
-                                label: "↺"
-                                fontSize: 11
-                                opacity: root.movedFromDefault ? 1 : 0.4
-                                onClicked: root.resetPosition()
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 36; height: 4; radius: 2
+                                color: Theme.bg
+                                opacity: (dragArea.containsMouse || root.dragging) ? 1 : 0.1
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
                             }
 
-                            FooterButton {
-                                label: "󰒓"
-                                fontSize: 12
-                                onClicked: {
-                                    root.settingsOpen = false
+                            MouseArea {
+                                id: dragArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton
+                                cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                                property real pressX: 0
+                                property real pressY: 0
+                                property real startX: 0
+                                property real startY: 0
+                                onPressed: function (mouse) {
+                                    var p = dragArea.mapToItem(menuRoot, mouse.x, mouse.y)
+                                    pressX = p.x
+                                    pressY = p.y
+                                    startX = root.offsetX
+                                    startY = root.offsetY
+                                    root.dragging = true
+                                }
+                                onPositionChanged: function (mouse) {
+                                    if (!root.dragging) return
+                                    var p = dragArea.mapToItem(menuRoot, mouse.x, mouse.y)
+                                    root.setPosition(startX + (p.x - pressX), startY + (p.y - pressY))
+                                }
+                                onReleased: {
+                                    if (!root.dragging) return
                                     root.dragging = false
+                                    root.saveState()
+                                }
+                                onCanceled: {
+                                    if (!root.dragging) return
+                                    root.dragging = false
+                                    root.saveState()
+                                }
+                                onDoubleClicked: root.resetPosition()
+                            }
+                        }
+
+                        // ---- main action list ----
+                        Column {
+                            visible: !root.settingsOpen
+                            width: parent.width
+                            spacing: root.itemSpacing
+
+                            Repeater {
+                                model: root.visibleActions
+                                delegate: Rectangle {
+                                    id: entry
+                                    required property var modelData
+                                    required property int index
+                                    readonly property bool focused: index === root.currentIndex
+
+                                    width: parent.width
+                                    height: root.itemHeight
+                                    radius: 12
+                                    color: entryArea.pressed || entryArea.containsMouse || entry.focused
+                                        ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, Math.min(1, Theme.bg.a + 0.12))
+                                        : Theme.bg
+                                    border.width: entry.focused ? 1 : 0
+                                    border.color: Theme.accent
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                                    Rectangle {
+                                        id: eThumb
+                                        width: 32; height: 32; radius: 8
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: "transparent"
+                                        Image {
+                                            anchors.centerIn: parent
+                                            width: 20; height: 20
+                                            sourceSize: Qt.size(root.iconRes, root.iconRes)
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
+                                            asynchronous: true
+                                            source: root.iconDir + root.iconFile(entry.modelData.icon)
+                                        }
+                                    }
+
+                                    Text {
+                                        anchors.left: eThumb.right
+                                        anchors.leftMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: entry.modelData.label
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        color: Theme.text
+                                    }
+
+                                    Rectangle {
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 20; height: 20; radius: 6
+                                        color: Theme.alpha(Theme.text, 0.08)
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: entry.modelData.key.toUpperCase()
+                                            font.pixelSize: 9
+                                            font.bold: true
+                                            color: Theme.textDim
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: entryArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onEntered: root.currentIndex = entry.index
+                                        onClicked: root.runAction(entry.modelData)
+                                    }
+                                }
+                            }
+
+                            Item {
+                                width: parent.width
+                                height: 16
+
+                                SizeControl {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 2
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    value: root.menuSize
+                                    onStep: function (d) { root.stepSize(d) }
+                                    onReset: root.resetSize()
+                                }
+
+                                FooterButton {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    label: "󰒓"
+                                    fontSize: 12
+                                    textColor: Theme.textDim
+                                    opacity: hovered ? 1 : 0.1
+                                    onClicked: {
+                                        root.settingsOpen = true
+                                        root.dragging = false
+                                    }
+                                }
+                            }
+                        }
+
+                        // ---- settings view ----
+                        Column {
+                            visible: root.settingsOpen
+                            width: parent.width
+                            spacing: root.itemSpacing
+
+                            Repeater {
+                                // empty model while closed: no delegates/images built
+                                model: root.settingsOpen ? root.actions : []
+
+                                delegate: Rectangle {
+                                    id: row
+                                    required property var modelData
+                                    readonly property bool on: root.hiddenNames.indexOf(modelData.name) < 0
+
+                                    width: parent.width
+                                    height: Math.max(36, root.itemHeight - 8)
+                                    radius: 12
+                                    color: Theme.alpha(
+                                        Theme._bgBase,
+                                        rowArea.containsMouse ? 0.9 : 0.8
+                                    )
+                                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                                    Rectangle {
+                                        id: rThumb
+                                        width: 32; height: 32; radius: 8
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: "transparent"
+
+                                        Image {
+                                            anchors.centerIn: parent
+                                            width: 20; height: 20
+                                            sourceSize: Qt.size(root.iconRes, root.iconRes)
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
+                                            asynchronous: true
+                                            source: root.iconDir + root.iconFile(row.modelData.icon)
+                                            opacity: row.on ? 1 : 0.4
+                                        }
+                                    }
+
+                                    Text {
+                                        anchors.left: rThumb.right
+                                        anchors.leftMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: row.modelData.label
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        color: row.on ? Theme.text : Theme.textDim
+                                    }
+
+                                    Rectangle {
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 34; height: 18; radius: 9
+                                        color: row.on ? Theme.accent : "transparent"
+                                        border.width: 1
+                                        border.color: row.on ? Theme.accent : Theme.alpha(Theme.text, 0.3)
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                                        Rectangle {
+                                            width: 12; height: 12; radius: 6
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            x: row.on ? parent.width - width - 3 : 3
+                                            color: row.on ? Theme.bg : Theme.text
+                                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: rowArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: root.toggleAction(row.modelData.name)
+                                    }
+                                }
+                            }
+
+                            // layout steppers
+                            Column {
+                                width: parent.width
+                                spacing: 2
+
+                                StepRow {
+                                    width: parent.width
+                                    label: "Width"
+                                    valueText: root.cardWidth + "px"
+                                    onStep: function (dir) { root.stepWidth(dir) }
+                                }
+                                StepRow {
+                                    width: parent.width
+                                    label: "Height"
+                                    valueText: root.itemHeight + "px"
+                                    onStep: function (dir) { root.stepHeight(dir) }
+                                }
+                                StepRow {
+                                    width: parent.width
+                                    label: "Spacing"
+                                    valueText: root.itemSpacing + "px"
+                                    onStep: function (dir) { root.stepSpacing(dir) }
+                                }
+                            }
+
+                            Item {
+                                width: parent.width
+                                height: 16
+
+                                SizeControl {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 2
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    value: root.menuSize
+                                    onStep: function (d) { root.stepSize(d) }
+                                    onReset: root.resetSize()
+                                }
+
+                                Row {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 6
+
+                                    FooterButton {
+                                        label: "↺"
+                                        fontSize: 11
+                                        opacity: root.movedFromDefault ? 1 : 0.4
+                                        onClicked: root.resetPosition()
+                                    }
+
+                                    FooterButton {
+                                        label: "󰒓"
+                                        fontSize: 12
+                                        onClicked: {
+                                            root.settingsOpen = false
+                                            root.dragging = false
+                                        }
+                                    }
                                 }
                             }
                         }
