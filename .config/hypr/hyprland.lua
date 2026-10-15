@@ -35,9 +35,10 @@ hl.config({
     input = {
         kb_layout = "us,latam",
         follow_mouse = 1,
-        sensitivity = 0.5,
+        sensitivity = 0.15,
         touchpad = {
-            natural_scroll = false,
+            natural_scroll = true,
+            scroll_factor = 1.0,
             tap_to_click = true,
         },
     },
