@@ -94,7 +94,7 @@ Item {
             "{gsub(/[+°C]/, \"\", $i); print $i; exit}}'"
     }
     function updateClock() {
-        page.currentTime = Qt.formatTime(new Date(), "HH:mm:ss")
+        page.currentTime = Qt.formatTime(new Date(), "h:mm:ss AP")
     }
 
     function drawGraph(ctx, history) {

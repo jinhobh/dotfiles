@@ -70,8 +70,8 @@ Scope {
     function fmtTime(ms) {
         const d = new Date(ms);
         return d.toDateString() === new Date().toDateString()
-            ? Qt.formatDateTime(d, "HH:mm")
-            : Qt.formatDateTime(d, "dd MMM HH:mm");
+            ? Qt.formatDateTime(d, "h:mm AP")
+            : Qt.formatDateTime(d, "dd MMM h:mm AP");
     }
     function copyText(s, b) { Quickshell.execDetached(["wl-copy", b !== "" ? s + "\n" + b : s]); }
     function removeHistory(i) { history.remove(i); saveTimer.restart(); }

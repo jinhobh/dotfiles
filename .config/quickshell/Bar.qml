@@ -1251,8 +1251,8 @@ Scope {
                         Mod {
                             bold: true
                             baseSize: root.sz.clock
-                            text: Qt.formatDateTime(clk.date, "HH:mm")
-                            vtext: Qt.formatDateTime(clk.date, "HH") + "\n" + Qt.formatDateTime(clk.date, "mm")
+                            text: Qt.formatDateTime(clk.date, "h:mm AP")
+                            vtext: Qt.formatDateTime(clk.date, "h") + "\n" + Qt.formatDateTime(clk.date, "mm") + "\n" + Qt.formatDateTime(clk.date, "AP")
                             active: clockPanel.calOpen
                             tip: Qt.formatDate(clk.date, "dddd, d MMMM yyyy")
                             primaryHint: clockPanel.calOpen ? "Close calendar" : "Open calendar"
@@ -1326,7 +1326,7 @@ Scope {
                                     Column {
                                         spacing: 2
                                         Text {
-                                            text: Qt.formatTime(calBox.now, "HH:mm")
+                                            text: Qt.formatTime(calBox.now, "h:mm AP")
                                             color: Theme.text
                                             font.family: Theme.iconFont
                                             font.pixelSize: root.sz.calTime
