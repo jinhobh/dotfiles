@@ -140,9 +140,17 @@ hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"), { locked = true, repeating = true })
 hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), { locked = true })
 
--- Brightness
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl set 5%+"), { locked = true, repeating = true })
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%-"), { locked = true, repeating = true })
+-- Brightness: 5% steps. brightnessctl can read the backlight but not write it
+-- (that needs the video group), so the new value is set through logind, which
+-- lets the active session change it. $1 = device, $2 = current, $3 = max.
+local function brightness_step(sign)
+    return hl.dsp.exec_cmd("sh -c 'set -- $(brightnessctl -m | cut -d, -f1,3,5 | tr , \" \"); "
+        .. "v=$(( $2 " .. sign .. " $3 / 20 )); [ $v -lt 0 ] && v=0; [ $v -gt $3 ] && v=$3; "
+        .. "busctl call org.freedesktop.login1 /org/freedesktop/login1/session/auto "
+        .. "org.freedesktop.login1.Session SetBrightness ssu backlight $1 $v'")
+end
+hl.bind("XF86MonBrightnessUp", brightness_step("+"), { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessDown", brightness_step("-"), { locked = true, repeating = true })
 
 hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })

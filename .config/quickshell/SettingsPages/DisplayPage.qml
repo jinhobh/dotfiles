@@ -14,6 +14,8 @@ Item {
     property real marginTop: 0
     property real marginBottom: 0
     property real brightnessValue: 0.6
+    property string backlightDevice: ""
+    property int backlightMax: 0
     property real nightlightValue: 0.5
     property bool nightlightEnabled: false
     property real sliderMarginRight: 10
@@ -26,8 +28,11 @@ Item {
         command: ["brightnessctl", "-m"]
         stdout: StdioCollector {
             onStreamFinished: {
+                // device,class,current,percent,max
                 const parts = text.trim().split(",")
-                if (parts.length >= 4) {
+                if (parts.length >= 5) {
+                    page.backlightDevice = parts[0]
+                    page.backlightMax = parseInt(parts[4]) || 0
                     const pct = parseInt(parts[3])
                     if (!isNaN(pct)) page.brightnessValue = pct / 100
                 }
@@ -37,9 +42,16 @@ Item {
 
     Process { id: brightnessSet }
 
+    // brightnessctl can't write the backlight without the video group, so set
+    // it through logind, which lets the active session change it.
     function commitBrightness(value) {
-        const pct = Math.round(value * 100) + "%"
-        brightnessSet.command = ["brightnessctl", "set", pct]
+        if (backlightDevice === "" || backlightMax <= 0)
+            return
+        brightnessSet.command = [
+            "busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto",
+            "org.freedesktop.login1.Session", "SetBrightness", "ssu",
+            "backlight", backlightDevice, String(Math.round(value * backlightMax))
+        ]
         brightnessSet.running = true
     }
 
