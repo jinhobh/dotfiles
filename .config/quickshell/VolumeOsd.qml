@@ -244,10 +244,50 @@ Scope {
         function onMutedChanged() { root.triggerOsd() }
     }
 
+    // ---- brightness watching ---------------------------------------------
+    // The kernel sends a udev "change" event whenever the backlight is set
+    // (keys, the Display page, anything else); each one re-reads the level.
+    property real brightness: 0
+    property bool brightnessPending: false   // show the OSD once the read finishes
+
+    Process {
+        id: backlightEvents
+        command: ["stdbuf", "-oL", "udevadm", "monitor", "--udev", "--subsystem-match=backlight"]
+        running: true
+        stdout: SplitParser {
+            onRead: data => {
+                if (data.indexOf(" change ") < 0)
+                    return
+                root.brightnessPending = root.ready
+                if (!brightnessRead.running)
+                    brightnessRead.running = true
+            }
+        }
+    }
+
+    Process {
+        id: brightnessRead
+        command: ["brightnessctl", "-m"]   // device,class,current,percent,max
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var f = this.text.trim().split(",")
+                var cur = parseInt(f[2]), max = parseInt(f[4])
+                if (max > 0 && !isNaN(cur))
+                    root.brightness = cur / max
+                if (root.brightnessPending) {
+                    root.brightnessPending = false
+                    root.triggerBrightnessOsd()
+                }
+            }
+        }
+    }
+
     // ---- OSD state ---------------------------------------------------------
     property bool ready: false
     property bool showing: false
     property bool showMedia: false
+    property bool showBrightness: false   // the flyout shows brightness instead of volume
     property bool pendingShow: false
     property bool settingsOpen: false
     property bool dragging: false
@@ -288,6 +328,7 @@ Scope {
             return
         }
         pendingShow = false
+        showBrightness = false
         showMedia = false
         showing = true
         hideTimer.restart()
@@ -297,7 +338,23 @@ Scope {
         if (!pendingShow)
             return
         pendingShow = false
+        showBrightness = false
         showMedia = playing
+        showing = true
+        hideTimer.restart()
+    }
+
+    // Same flyout as volume, showing the backlight level.
+    function triggerBrightnessOsd() {
+        if (!ready)
+            return
+        if (showing && (settingsOpen || dragging || (showMedia && pinned))) {
+            hideTimer.restart()
+            return
+        }
+        pendingShow = false
+        showBrightness = true
+        showMedia = false
         showing = true
         hideTimer.restart()
     }
@@ -683,6 +740,10 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
 
                         text: {
+                            // nf-md brightness-5 / -6 / -7
+                            if (root.showBrightness)
+                                return root.brightness < 0.34 ? "󰃞"
+                                     : root.brightness < 0.67 ? "󰃟" : "󰃠"
                             if (root.muted)
                                 return "󰖁"
                             if (root.volume <= 0)
@@ -693,7 +754,7 @@ Scope {
                         }
 
                         font.family: "Symbols Nerd Font"
-                        font.pixelSize: 20
+                        font.pixelSize: root.showBrightness ? 16 : 20   // brightness glyph reads larger
                         color: Theme.text
                     }
 
@@ -701,7 +762,8 @@ Scope {
                         anchors.right: parent.right
                         anchors.rightMargin: 20
                         anchors.verticalCenter: parent.verticalCenter
-                        text: root.muted ? "Muted" : Math.round(root.volume * 100) + "%"
+                        text: root.showBrightness ? Math.round(root.brightness * 100) + "%"
+                            : root.muted ? "Muted" : Math.round(root.volume * 100) + "%"
                         font.pixelSize: 12
                         font.bold: true
                         color: Theme.text
@@ -718,7 +780,8 @@ Scope {
                         color: "#555555"
 
                         Rectangle {
-                            width: root.muted ? 0 : parent.width * Math.min(root.volume, 1)
+                            width: root.showBrightness ? parent.width * Math.min(root.brightness, 1)
+                                 : root.muted ? 0 : parent.width * Math.min(root.volume, 1)
                             height: parent.height
                             radius: 4
                             color: Theme.text
