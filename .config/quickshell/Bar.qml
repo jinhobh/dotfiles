@@ -908,6 +908,11 @@ Scope {
             implicitWidth: root.vertical ? root.panelThick : len + 20
             implicitHeight: root.vertical ? len + 20 : 18
 
+            // Hovering opens the media popup (VolumeOsd), so no tooltip here.
+            noTip: true
+            onHoveredChanged: Marquee.barHovered = hovered
+            Component.onDestruction: if (hovered) Marquee.barHovered = false
+
             tip: Marquee.text
             primaryHint: playing ? "Pause" : "Play"
             secondaryHint: "Next track"

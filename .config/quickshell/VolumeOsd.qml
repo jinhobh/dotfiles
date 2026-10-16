@@ -55,6 +55,7 @@ Scope {
     readonly property var boolDefaults: ({
         showVisualizer: true,
         trackChangeOsd: true,
+        volumeMediaOsd: false,
         showArt: true,
         musicOnly: true,
         artistBelow: false,
@@ -88,6 +89,7 @@ Scope {
 
     property bool showVisualizer: boolDefaults.showVisualizer
     property bool trackChangeOsd: boolDefaults.trackChangeOsd
+    property bool volumeMediaOsd: boolDefaults.volumeMediaOsd
     property bool showArt: boolDefaults.showArt
     property bool musicOnly: boolDefaults.musicOnly
     property bool artistBelow: boolDefaults.artistBelow
@@ -262,22 +264,63 @@ Scope {
         id: hideTimer
         interval: root.showMedia ? root.mediaTimeout : root.volTimeout
         onTriggered: {
-            if (root.hovered || root.settingsOpen || root.dragging || (root.showMedia && root.pinned))
+            if (root.hovered || root.settingsOpen || root.dragging
+                    || (root.showMedia && (root.pinned || Marquee.barHovered)))
                 hideTimer.restart()
             else
                 root.showing = false
         }
     }
 
+    // Volume changes show the volume slider. With "Pop up on volume change"
+    // on, they show the media popup instead while music is playing.
     function triggerOsd() {
         if (!ready)
             return
-        if (showing) {
+        if (showing && (settingsOpen || dragging || (showMedia && (pinned || volumeMediaOsd)))) {
             hideTimer.restart()
             return
         }
-        pendingShow = true
-        updateMedia()
+        if (volumeMediaOsd && !showing) {
+            // fetch the current player state first; finishPendingShow decides
+            pendingShow = true
+            updateMedia()
+            return
+        }
+        pendingShow = false
+        showMedia = false
+        showing = true
+        hideTimer.restart()
+    }
+
+    function finishPendingShow() {
+        if (!pendingShow)
+            return
+        pendingShow = false
+        showMedia = playing
+        showing = true
+        hideTimer.restart()
+    }
+
+    // Hovering the track title in the bar opens the media popup
+    // (short delay so just sweeping the pointer past it doesn't).
+    Timer {
+        id: barHoverTimer
+        interval: 200
+        onTriggered: if (Marquee.barHovered) root.triggerMediaOsd()
+    }
+
+    Connections {
+        target: Marquee
+        function onBarHoveredChanged() {
+            if (Marquee.barHovered)
+                barHoverTimer.restart()
+            else {
+                barHoverTimer.stop()
+                if (root.showing && root.showMedia)
+                    hideTimer.restart()
+            }
+        }
     }
 
     function showMediaOsd() {
@@ -323,15 +366,6 @@ Scope {
         settingsOpen = false
         dragging = false
         showing = false
-    }
-
-    function finishPendingShow() {
-        if (!pendingShow)
-            return
-        pendingShow = false
-        showMedia = playing
-        showing = true
-        hideTimer.restart()
     }
 
     onShowingChanged: {
@@ -1111,6 +1145,7 @@ Scope {
                         SectionHeader { text: "Behavior" }
                         ToggleRow { host: root; key: "musicOnly"; label: "Music players only"; checked: root.musicOnly }
                         ToggleRow { host: root; key: "trackChangeOsd"; label: "Pop up on track change"; checked: root.trackChangeOsd }
+                        ToggleRow { host: root; key: "volumeMediaOsd"; label: "Pop up on volume change"; checked: root.volumeMediaOsd }
                         SliderRow { host: root; key: "mediaTimeout"; label: "Media hide after" }
 
                         SectionHeader { text: "Volume popup" }

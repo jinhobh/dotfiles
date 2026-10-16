@@ -18,6 +18,9 @@ Scope {
     // nf-md play / pause
     readonly property string text: (playing ? "\uDB81\uDC0A " : "\uDB80\uDFE4 ") + title
 
+    // Set by the bar's media module; VolumeOsd shows the media popup while true.
+    property bool barHovered: false
+
     readonly property int maxW: 130       // visible width in px
     readonly property int gap: 20         // gap between the two copies
     readonly property int step: 1         // px per tick (integer = crisp text)
