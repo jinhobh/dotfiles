@@ -14,6 +14,7 @@ browser    = "firefox"
 hl.on("hyprland.start", function()
     -- hl.exec_cmd("dunst") replaced with quickshell 
     hl.exec_cmd("nm-applet")
+    hl.exec_cmd("ibus-daemon -drx")
     hl.exec_cmd("wl-paste --type text --watch cliphist store")
     hl.exec_cmd("wl-paste --type image --watch cliphist store")
     hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
@@ -28,12 +29,15 @@ end)
 hl.env("XCURSOR_SIZE", "14")
 hl.env("QT_QPA_PLATFORM", "wayland")
 hl.env("MOZ_ENABLE_WAYLAND", "1")
+hl.env("GTK_IM_MODULE", "ibus")
+hl.env("QT_IM_MODULE", "ibus")
+hl.env("XMODIFIERS", "@im=ibus")
 
 ---- INPUT ----
 
 hl.config({
     input = {
-        kb_layout = "us,latam",
+        kb_layout = "us,kr",
         follow_mouse = 1,
         sensitivity = 0.15,
         touchpad = {
