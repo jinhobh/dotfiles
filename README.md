@@ -44,11 +44,6 @@ System stats, audio, display, network, bluetooth, storage, power, configs and th
   <img src="assets/powermenu.jpg" width="40%" alt="Power menu">
 </p>
 
-### Terminal
-Ghostty + Neovim + fastfetch. Both Ghostty and Neovim follow the active theme. Neovim uses only ANSI colors, so it changes with the theme without a reload.
-
-![Terminal](assets/terminal.jpg)
-
 ## Features
 
 - **Top bar**: clock, media with a scrolling title (hover it for a popup), volume, battery, wifi, notifications. Right-click the clock for bar settings (position, style, modules).
