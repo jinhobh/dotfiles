@@ -37,7 +37,6 @@ Item {
             return
 
         if (page.adapter.enabled) {
-            BluetoothState.reconnectPaused = true
             setDiscovering(false)
 
             var devs = BluetoothState.deviceList()
@@ -51,7 +50,6 @@ Item {
             return
         }
 
-        BluetoothState.reconnectPaused = false
         page.adapter.enabled = true
     }
 
@@ -68,7 +66,6 @@ Item {
 
         if (dev.state === BluetoothDeviceState.Connected) {
             setStatus("Disconnecting " + name + "...")
-            BluetoothState.forget(dev.address)
             dev.disconnect()
             return
         }
@@ -85,6 +82,13 @@ Item {
 
         setDiscovering(false)
         dev.trusted = true
+
+        if (!dev.bonded) {
+            setStatus("Pairing with " + name + "...")
+            BluetoothState.pairThenConnect(dev)
+            return
+        }
+
         setStatus("Connecting to " + name + "...")
         dev.connect()
     }

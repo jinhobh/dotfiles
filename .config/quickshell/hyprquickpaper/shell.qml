@@ -70,7 +70,7 @@ PanelWindow {
         id: folderModel
         folder: "file://" + main.wallpaperPath
         showDirs: false
-        nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp"]
+        nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif"]
         sortField: FolderListModel.Name
     }
 
@@ -251,7 +251,7 @@ PanelWindow {
                     asynchronous: true
                     cache: false
                     smooth: true
-                    source: "file://" + main.cachePath + fileName
+                    source: "file://" + main.cachePath + encodeURIComponent(fileName)
                     sourceSize.width: delegateItem.baseWidth * main.zoomScale
                     sourceSize.height: delegateItem.height
                     transform: Shear { xFactor: main.skewFactor }

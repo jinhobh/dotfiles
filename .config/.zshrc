@@ -63,3 +63,12 @@ ZSH_HIGHLIGHT_STYLES[unknown-token]='fg=245'
 
 # 43PR theme controller
 theme() { python3 "$HOME/.config/43pr/bin/theme.py" "$@"; }
+export PATH="$HOME/.local/bin:$PATH"
+
+# CS 3410
+alias rv='docker run -i --init --rm -v $PWD:/root ghcr.io/sampsyo/cs3410-infra'
+
+export PATH="$PATH:$HOME/.spicetify"
+
+alias dstart='sudo systemctl start docker.socket docker.service'
+alias dstop='sudo systemctl stop docker.socket docker.service containerd.service'

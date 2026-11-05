@@ -771,7 +771,6 @@ Scope {
             x: Marquee.animating ? Marquee.x : 0
             spacing: Marquee.gap
             anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: root.vertical ? 0 : root.iconYOffset
 
             Repeater {
                 model: Marquee.animating ? 2 : 1
@@ -779,7 +778,7 @@ Scope {
                     required property int index
                     text: Marquee.text
                     color: Theme.text
-                    font.family: Theme.iconFont
+                    font.family: "Noto Sans CJK KR"
                     font.pixelSize: root.sz.marquee
                     renderType: root.vertical ? Text.QtRendering : Text.NativeRendering
                     // first copy is width-limited/elided when not scrolling
@@ -902,16 +901,34 @@ Scope {
     Component {
         id: mediaC
         Interactive {
+            id: media
             readonly property bool playing: Marquee.player !== null && Marquee.player.isPlaying === true
             readonly property real len: Math.min(Marquee.textW, Marquee.maxW)   // visible text length
 
             implicitWidth: root.vertical ? root.panelThick : len + 20
             implicitHeight: root.vertical ? len + 20 : 18
 
+            // Where this module is on screen, for VolumeOsd to open the media popup
+            // next to it. The bar window hugs its edge, so only right/bottom bars
+            // need the window's offset added.
+            function place() {
+                const win = media.QsWindow.window;
+                if (!win || !win.visible || !win.screen || !media.visible) return null;
+                const p = win.contentItem.mapFromItem(media, 0, 0);
+                const ox = cfg.position === "right" ? win.screen.width - win.width : 0;
+                const oy = cfg.position === "bottom" ? win.screen.height - win.height : 0;
+                return { screen: win.screen, edge: cfg.position,
+                         rect: Qt.rect(p.x + ox, p.y + oy, media.width, media.height) };
+            }
+            Component.onCompleted: Marquee.register(media)
+            Component.onDestruction: Marquee.unregister(media)
+
             // Hovering opens the media popup (VolumeOsd), so no tooltip here.
             noTip: true
-            onHoveredChanged: Marquee.barHovered = hovered
-            Component.onDestruction: if (hovered) Marquee.barHovered = false
+            onHoveredChanged: {
+                if (hovered) Marquee.hoveredItem = media;
+                Marquee.barHovered = hovered;
+            }
 
             tip: Marquee.text
             primaryHint: playing ? "Pause" : "Play"
@@ -940,6 +957,7 @@ Scope {
             readonly property bool muted: ready ? sink.audio.muted : false
 
             glyphSize: root.sz.icon
+            yOffset: root.iconYOffset
             glyph: muted || vol <= 0 ? "\uDB81\uDF5F" : "\uDB81\uDD7E"
             warning: muted
             disabled: !ready
@@ -1249,7 +1267,18 @@ Scope {
                     property bool calOpen: false
                     property int monthOffset: 0
 
-                    SystemClock { id: clk; precision: SystemClock.Minutes }
+                    // Polled instead of SystemClock so the time self-corrects after suspend or clock jumps.
+                    QtObject { id: clk; property date date: new Date() }
+                    Timer {
+                        interval: 1000
+                        running: true
+                        repeat: true
+                        onTriggered: {
+                            const d = new Date();
+                            if (Qt.formatDateTime(d, "yyyyMMddhhmm") !== Qt.formatDateTime(clk.date, "yyyyMMddhhmm"))
+                                clk.date = d;
+                        }
+                    }
 
                     Component {
                         id: clockC

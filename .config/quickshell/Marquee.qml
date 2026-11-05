@@ -20,6 +20,25 @@ Scope {
 
     // Set by the bar's media module; VolumeOsd shows the media popup while true.
     property bool barHovered: false
+    property Item hoveredItem: null
+
+    // The media module on every bar registers here so the popup can open right
+    // next to it. Each item has place() → { screen, rect (screen-local), edge } or null.
+    property var mediaItems: []
+    function register(item) { mediaItems = mediaItems.concat([item]) }
+    function unregister(item) {
+        mediaItems = mediaItems.filter(i => i !== item)
+        if (hoveredItem === item) { hoveredItem = null; barHovered = false }
+    }
+    // The visible media module on the named screen (any screen if empty).
+    function locate(screenName) {
+        for (const item of mediaItems) {
+            const p = item.place()
+            if (p && (screenName === "" || p.screen.name === screenName))
+                return p
+        }
+        return null
+    }
 
     readonly property int maxW: 130       // visible width in px
     readonly property int gap: 20         // gap between the two copies
@@ -39,7 +58,7 @@ Scope {
         Text {
             id: measure
             text: root.text
-            font.family: Theme.iconFont
+            font.family: "Noto Sans CJK KR"
             font.pixelSize: 11
         }
     }

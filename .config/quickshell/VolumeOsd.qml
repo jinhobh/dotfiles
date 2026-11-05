@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Services.Pipewire
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Io
 import QtQuick
 import QtQuick.Effects
@@ -24,6 +25,8 @@ Scope {
             root.winH = 0
             root.hitW = 0
             root.hovered = false
+            root.anchor = null
+            root.osdScreen = null
         }
     }
 
@@ -59,7 +62,8 @@ Scope {
         showArt: true,
         musicOnly: true,
         artistBelow: false,
-        portrait: true
+        portrait: true,
+        mediaFree: false      // media popup was dragged: use offsetX/Y instead of the bar spot
     })
     readonly property var boolKeys: Object.keys(boolDefaults)
 
@@ -94,16 +98,59 @@ Scope {
     property bool musicOnly: boolDefaults.musicOnly
     property bool artistBelow: boolDefaults.artistBelow
     property bool portrait: boolDefaults.portrait
+    property bool mediaFree: boolDefaults.mediaFree
 
     readonly property real scaleFactor: osdScale / 100
 
     // Card background: theme colour with its alpha replaced by the
     // "Background" setting (100% = fully opaque).
     readonly property color cardColor: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, bgOpacity / 100)
-    readonly property real curX: showMedia ? offsetX : volOffsetX
-    readonly property real curY: showMedia ? offsetY : volOffsetY
+    // Until the media popup has been dragged (mediaFree), it sits right next
+    // to the bar's media module: the hovered one, else the one on the focused
+    // monitor. Dragging saves a free position; resetting snaps back to the module.
+    property var anchor: null         // Marquee place(): { screen, rect, edge }, or null
+    property var osdScreen: null      // screen the OSD window opens on; null = default
+    property real mediaCardH: 0       // reported by the OSD window
+    readonly property int barGap: 8
 
-    readonly property bool mediaMoved: offsetX !== 0 || offsetY !== 0
+    function anchorMedia(fromBar) {
+        var a = fromBar && Marquee.hoveredItem ? Marquee.hoveredItem.place() : null
+        if (!a) {
+            // already up: stay on that screen instead of jumping monitors
+            var scr = showing ? osdScreen : null
+            a = Marquee.locate(scr ? scr.name : (Hyprland.focusedMonitor?.name ?? ""))
+        }
+        anchor = a
+        if (a && (fromBar || !showing))
+            osdScreen = a.screen
+    }
+
+    readonly property point barPos: {
+        if (!anchor)
+            return Qt.point(0, 0)
+        var r = anchor.rect
+        var w = (portrait ? portraitWidth : mediaWidth) * scaleFactor
+        var h = mediaCardH * scaleFactor
+        var full = h + toolsHeight * scaleFactor   // card + drag/settings strip below it
+        var cx, top
+        switch (anchor.edge) {
+        case "bottom": cx = r.x + r.width / 2;              top = r.y - barGap - full; break
+        case "left":   cx = r.x + r.width + barGap + w / 2; top = r.y + (r.height - h) / 2; break
+        case "right":  cx = r.x - barGap - w / 2;           top = r.y + (r.height - h) / 2; break
+        default:       cx = r.x + r.width / 2;              top = r.y + r.height + barGap
+        }
+        // keep it fully on screen
+        cx = Math.max(w / 2 + barGap, Math.min(winW - w / 2 - barGap, cx))
+        top = Math.max(barGap, Math.min(winH - full - barGap, top))
+        return Qt.point(cx - winW / 2, top - topGap)
+    }
+
+    readonly property real mediaX: mediaFree ? offsetX : barPos.x
+    readonly property real mediaY: mediaFree ? offsetY : barPos.y
+    readonly property real curX: showMedia ? mediaX : volOffsetX
+    readonly property real curY: showMedia ? mediaY : volOffsetY
+
+    readonly property bool mediaMoved: mediaFree
 
     readonly property bool modified:
         posKeys.some(k => root[k] !== 0)
@@ -339,6 +386,8 @@ Scope {
             return
         pendingShow = false
         showBrightness = false
+        if (playing)
+            anchorMedia(false)
         showMedia = playing
         showing = true
         hideTimer.restart()
@@ -364,7 +413,7 @@ Scope {
     Timer {
         id: barHoverTimer
         interval: 200
-        onTriggered: if (Marquee.barHovered) root.triggerMediaOsd()
+        onTriggered: if (Marquee.barHovered) root.triggerMediaOsd(true)
     }
 
     Connections {
@@ -380,7 +429,8 @@ Scope {
         }
     }
 
-    function showMediaOsd() {
+    function showMediaOsd(fromBar) {
+        anchorMedia(fromBar)
         pendingShow = false
         showMedia = true
         showing = true
@@ -388,12 +438,14 @@ Scope {
         updateMedia()
     }
 
-    function triggerMediaOsd() {
+    function triggerMediaOsd(fromBar) {
         if (ready)
-            showMediaOsd()
+            showMediaOsd(fromBar === true)
     }
 
     function openSettings() {
+        if (!showing || !showMedia)
+            anchorMedia(false)
         pendingShow = false
         settingsOpen = true
         showMedia = true
@@ -481,6 +533,8 @@ Scope {
             ny = Math.max(minY, Math.min(maxY, y))
         }
         if (showMedia) {
+            // the drag started from curX/Y (possibly the bar spot), so this is seamless
+            mediaFree = true
             offsetX = nx
             offsetY = ny
         } else {
@@ -491,6 +545,7 @@ Scope {
 
     function resetPos(media) {
         if (media) {
+            mediaFree = false   // back under the bar's media module
             offsetX = 0
             offsetY = 0
         } else {
@@ -675,6 +730,7 @@ Scope {
 
             readonly property Item activeCard: root.showMedia ? mediaPanel : flyout
 
+            screen: root.osdScreen
             anchors { top: true; bottom: true; left: true; right: true }
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
@@ -701,6 +757,11 @@ Scope {
                 target: root
                 property: "hovered"
                 value: flyoutHover.hovered || mediaHover.hovered || toolsHover.hovered
+            }
+            Binding {
+                target: root
+                property: "mediaCardH"
+                value: mediaPanel.height
             }
 
             Item {
@@ -793,8 +854,8 @@ Scope {
                 OsdCard {
                     id: mediaPanel
                     host: root
-                    xOffset: root.offsetX
-                    yOffset: root.offsetY
+                    xOffset: root.mediaX
+                    yOffset: root.mediaY
                     open: win.reveal && root.showing && root.showMedia
                     width: root.portrait ? root.portraitWidth : root.mediaWidth
                     height: mediaCol.height + 28

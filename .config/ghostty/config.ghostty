@@ -1,0 +1,3 @@
+config-file = ?colors.ghostty
+font-size = 11
+window-theme = system

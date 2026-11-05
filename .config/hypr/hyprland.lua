@@ -4,7 +4,7 @@
 ---- MY PROGRAMS ----
 
 mainMod    = "SUPER"
-terminal   = "kitty"
+terminal   = "ghostty"
 menu       = "rofi -show drun"
 fileManager = "thunar"
 browser    = "firefox"

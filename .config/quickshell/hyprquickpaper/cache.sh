@@ -26,7 +26,8 @@ echo "Cache path: $cache_path"
 find "$wallpaper_path" -type f \( \
     -iname "*.jpg" -o \
     -iname "*.jpeg" -o \
-    -iname "*.png" \
+    -iname "*.png" -o \
+    -iname "*.gif" \
 \) | while read -r img; do
 
     filename=$(basename "$img")
@@ -37,7 +38,7 @@ find "$wallpaper_path" -type f \( \
     fi
 
     echo "Generating thumbnail for $filename"
-    convert "$img" -thumbnail x500 -strip -quality 85 "$out" &
+    convert "$img[0]" -thumbnail x500 -strip -quality 85 "$out" &
 
     if (( cache_batch_size > 0 )); then
         while (( $(jobs -rp | wc -l) >= cache_batch_size )); do

@@ -1,149 +1,145 @@
 <div align="center">
 
-## Hyprland Setup by 43pr メ
+## jinhobh's Hyprland dotfiles
 
-A clean and simple Hyprland setup focused on practical keybinds, productivity, and easy to customize.
+A monochrome Hyprland + Quickshell desktop with dynamic, wallpaper-driven colors.
+Built on top of [43PR/dotfiles](https://github.com/43PR/dotfiles).
 
 ![Hyprland](https://img.shields.io/badge/Hyprland-0.56.2-8b9aaf?style=for-the-badge&labelColor=101418)
-[![Discord](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FHQwU9SzHj%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&style=for-the-badge&logo=discord&logoColor=ffffff&label=discord&labelColor=101418&color=7289a8)](https://discord.gg/HQwU9SzHj)
-[![YouTube](https://img.shields.io/badge/youtube-subscribe-b05a63?style=for-the-badge&logo=youtube&logoColor=ffffff&labelColor=101418)](https://www.youtube.com/@43PR2)
-[![Ko-Fi donate](https://img.shields.io/badge/donate-kofi?style=for-the-badge&logo=ko-fi&logoColor=ffffff&label=ko-fi&labelColor=101418&color=9a6570)](https://ko-fi.com/43pr)
+![Arch](https://img.shields.io/badge/Arch_Linux-1793d1?style=for-the-badge&logo=archlinux&logoColor=ffffff&labelColor=101418)
 
-### **[Features](#features)  -  [Keybinds](#keybinds)  -  [Installation](#installation) -  [Updating](#updating)**
+### **[Screenshots](#screenshots) - [What's different](#whats-different-from-upstream) - [Keybinds](#keybinds) - [Installation](#installation) - [Updating](#updating)**
 
 </div>
 
-<img width="1920" height="1080" alt="1792007263" src="https://github.com/user-attachments/assets/a0a001e2-65a3-4092-9858-831cebd7e0a1" />
+![Desktop](assets/desktop.jpg)
 
-Wallpapers: https://wallhaven.cc/user/43pr
+## Screenshots
+
+### Theme presets
+Switch the colors across the whole desktop (bar, terminal, settings, lock screen, rofi, GTK, btop, cava) with one command. You can also generate a palette from your wallpaper.
+
+![Theme presets cycling](assets/themes.gif)
+
+```bash
+theme preset nord                               # any file in .config/43pr/themes/
+theme wallpaper ~/Pictures/Wallpapers/foo.jpg   # colors generated from the image
+theme toggle                                    # light / dark
+```
+
+### Settings menu (`Super + I`)
+System stats, audio, display, network, bluetooth, storage, power, configs and themes.
+
+![Settings](assets/settings.jpg)
+
+### Launcher (`Super + D`) and power menu (``Super + ` ``)
+
+<p>
+  <img src="assets/rofi.jpg" width="56%" alt="Rofi launcher">
+  <img src="assets/powermenu.jpg" width="40%" alt="Power menu">
+</p>
+
+### Terminal
+Ghostty + Neovim + fastfetch. Both Ghostty and Neovim follow the active theme. Neovim uses only ANSI colors, so it changes with the theme without a reload.
+
+![Terminal](assets/terminal.jpg)
 
 ## Features
 
-- **Top bar** - Customizing options, vertical bar, styles, calendar, controls for volume and media playback.
-- **Settings Menu** — System, network, bluetooth, display, audio, storage, themes, and more.
-- **Wallpaper picker & Dynamic Colors** — Custom wallpaper selector with automatic wallpaper-based color generation.
-- **Preset Themes** — Default Monochrome, Nord, Tokyo Night, etc, and easily create your own. 
-- **App Launcher** — **Rofi** Application search, clipboard history, and opacity control.
-- **Zsh + Starship** — Customizable shell with autosuggestions and history.
-- **Customizable Power Menu** —  Custom power menu. 
-- **Notes / To do** —  Custom quick Notes/To-do. 
-- **Hyprlock** — Custom lock screen.
-- **Spotify + Spicetify** — Custom theme based on **text - darkthemer**, (modified).
-- **Custom Scripts** — Scripts for workflow and system management.
+- **Top bar**: clock, media with a scrolling title (hover it for a popup), volume, battery, wifi, notifications. Right-click the clock for bar settings (position, style, modules).
+- **Volume and brightness OSDs**: sliders pop up when you use the media or brightness keys.
+- **Settings menu**: system, network, bluetooth, display, audio, storage, power, configs, themes.
+- **Wallpaper picker** ([hyprquickpaper](https://github.com/iamsurjog/hyprquickpaper)) with automatic color generation.
+- **18 preset themes**: monochrome default, Nord, Tokyo Night, Catppuccin, Rosé Pine, Everforest, Dracula, Kanagawa and more.
+- **Rofi** for the app launcher and clipboard history. **Quickshell** for the wheel launcher, power menu, notes/to-do and notifications.
+- **Hyprlock** lock screen, **zsh + starship** prompt, **Spicetify** theme for Spotify.
+- **Optional greetd login screen** with an animated ASCII greeter (see [`greeter/`](greeter)).
 
-> All programs: [packages.txt](packages.txt)
+> All packages: [packages.txt](packages.txt)
 
-### Wallpaper Selector
+## What's different from upstream
 
-Just made some tweaks to it. Give it some love: [hyprquickpaper](https://github.com/iamsurjog/hyprquickpaper)
+- **Ghostty** is the default terminal (kitty is still installed). Its theme is generated alongside the others.
+- A plain **Neovim** config with no plugins (`.config/nvim/init.lua`) that uses the terminal's colors.
+- **Keybind changes**: terminal on `Super+X`, wallpapers on `Super+P`, screenshots on `Super+Delete`, vim-style focus/move/resize on H/J/K/L, **3-finger swipe** to switch workspaces.
+- **Laptop support**: brightness keys (set through logind, so you don't need the `video` group), brightness OSD, touchpad natural scroll, lower pointer sensitivity.
+- **Korean input** via ibus.
+- **Quickshell**: volume/brightness slider OSDs, a media hover popup, Bluetooth fixes, lower CPU and memory use, 12-hour clock.
+- **greetd greeter** with an animated ASCII login screen.
 
 ## Keybinds
 
-> **You can modify keybinds using HyprMod**
+| Keybind | Action |
+| --- | --- |
+| `Super + X` | Terminal (Ghostty) |
+| `Super + Q` | Close window |
+| `Super + D` | App launcher (rofi) |
+| `Super + S` | Wheel launcher |
+| `Super + E` | File manager (Thunar) |
+| `Super + B` | Browser (Firefox) |
+| `Super + I` | Settings menu |
+| `Super + P` | Wallpaper picker |
+| `Super + V` | Clipboard history |
+| `Super + C` | Notes / to-do |
+| `Super + N` | Notifications |
+| `Super + O` | Cycle window opacity |
+| `Super + L` | Toggle light / dark theme |
+| `Super + Space` | Toggle floating (centered) |
+| `Super + F` | Fullscreen |
+| `Super + Tab` | Lock screen |
+| ``Super + ` `` | Power menu |
+| `Super + Shift + W` | Toggle bar |
+| `Super + R` | Screen recorder (gpu-screen-recorder) |
+| `Super + H / J / K / L` | Move focus |
+| `Super + Shift + H / J / K / L` | Move window |
+| `Super + Ctrl + H / J / K / L` | Resize window |
+| `Super + 1..0` | Switch workspace |
+| `Super + Shift + 1..0` | Move window to workspace |
+| `Super + Delete` | Screenshot area |
+| `Super + Shift + Delete` | Screenshot full screen |
+| `Super + Scroll` | Zoom in/out |
+| `Super + Shift + E` | Exit Hyprland |
+| 3-finger swipe up/down | Previous / next workspace |
 
-| Keybind                 | Action                    |
-| -----------             | ------------------------- |
-| `Super + T`             | Terminal                  |
-| `Super + Q`             | Close active window       |
-| `Super + D`             | Application launcher      |
-| `Super + Space`         | Toggle floating window    |
-| `Super + F`             | Toggle fullscreen         |
-| `Super + 1, 2, 3..`     | Change workspaces         |
-| `Super + Shift + 1, 2..`| Move window to workspace  |
-| `Super + E`             | File manager              |
-| `Super + B`             | Browser                   |
-| `Super + V`             | Clipboard history         |
-| `Super + S`             | Second launcher           |
-| `Super + I`             | Settings menu             |
-| `Super + W`             | Wallpaper selector        |
-| `Super + O`             | Switch opacity            |
-| `Super + Tab`           | Lock screen               |
-| `Super + Grave`         | Logout menu               |
-| `Super + Shift + W`     | Toggle bar                |
-| `Super + Mouse wheel`   | Zoom in/out               |
-| `Super + C`             | Notes/To-do               |
-| `Super + N`             | Notifications             |
-| `Delete`                | Screenshot fullscreen     |
-| `SHIFT + Delete`        | Screenshot area select    |
+Drag windows with `Super + left mouse` and resize them with `Super + right mouse`. The full list is in [`.config/hypr/keybinds.lua`](.config/hypr/keybinds.lua).
 
-> [!note]
->
-> **Move and resize windows with Super + left/right mouse drag.**
->
-> All keybinds: [.config/hypr/keybinds.lua](.config/hypr/keybinds.lua)
+## Installation
 
----
-## Installation 
-
-**READ ALL**
-
-Works for Arch, CachyOS, EndeavourOS, Manjaro, etc. 
-
-This is mainly intended for a clean installation (existing configuration files that are being replaced will be backed up automatically).
-
-**First install git then use the next command and continue the installation until it's finished**
+Works on Arch-based distros (Arch, CachyOS, EndeavourOS, Manjaro…). It's meant for a fresh install. The installer backs up any existing config files it replaces to `~/.config-backups/`.
 
 ```bash
-sudo pacman -S git   
-```
-
-```bash
-git clone https://github.com/43PR/dotfiles.git
+sudo pacman -S git
+git clone https://github.com/jinhobh/dotfiles.git
 cd dotfiles
-chmod +x install.sh
 ./install.sh
 ```
 
-After the installation finishes log out and back in.
-
-Right-click the clock to open Bar Settings. 
-
-Dowload and move wallpapers to Pictures/Wallpapers. Wallpaper picker: Super + W.
+Log out and back in when it finishes. Put wallpapers in `~/Pictures/Wallpapers` and open the picker with `Super + P`.
 
 > [!important]
-> **Do not move or delete the dotfiles repository after installation.**
->
-> This setup uses **symbolic links (symlinks)** that point to files inside the cloned repository. If you move or delete the repository, those symlinks will break.
->
-> If you relocate the repository, simply run:
->
-> ```bash
-> ./install.sh
-> ```
->
-> The installer will automatically update the existing symlinks to point to the new location.
+> Configs are **symlinked** into `~/.config` from the cloned repo, so don't move or delete the repo afterwards. If you do move it, run `./install.sh` again to repoint the links.
 
----
+### Just want one piece?
+You don't have to install the whole thing. Most configs work on their own:
+
+- Neovim: `.config/nvim/init.lua`
+- Ghostty: `.config/ghostty/config.ghostty`
+- zsh / starship: `.config/.zshrc`, `.config/starship.toml`
+- Theme engine: `.config/43pr/` (`bin/theme.py` + `templates/` + `themes/`)
+
 ## Updating
-
-If you didn't move the repository/dotfiles folder then run:
 
 ```bash
 cd dotfiles
 git pull
-./update.sh
+./update.sh                   # --dry-run, --skip-packages, --skip-theme
+./update.sh --restart-shell   # if any .qml files changed
 ```
 
-Other options: `--dry-run` (preview changes), `--skip-packages`, `--skip-theme`.
+## Credits
 
-Dotfiles are symlinked so, `git pull` updates your live configs directly.
+- [43PR/dotfiles](https://github.com/43PR/dotfiles): the base this setup is built on (bar, settings, theme engine, installer). Go give it a star.
+- [hyprquickpaper](https://github.com/iamsurjog/hyprquickpaper): wallpaper selector.
+- [text](https://github.com/spicetify/spicetify-themes): Spicetify theme (modified).
 
-You can check the reminders printed at the end of the run.
-
-> [!tip]
-> If any Quickshell (`.qml`) files changed in the pull, run:
->
-> ```bash
-> ./update.sh --restart-shell
-> ```
->
-> to restart Quickshell automatically.
-
-> [!note]
-> 
-> Custom-gpu parts are specific to my hardware.
->
-> For issues with the wallpaper picker, you can clear the cache from the Storage page in Settings.
-
-
-
+MIT licensed. See [LICENSE](LICENSE).

@@ -15,13 +15,16 @@ Singleton {
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property bool btSink: !!(sink && sink.name && sink.name.indexOf("bluez") >= 0)
 
+    // Never starts a connection on its own: those only happen when the user asks (Connect in
+    // Settings, or bluetoothctl). Auto-connecting steals devices like AirPods from whatever
+    // other host (e.g. a phone) is using them. Trusted devices may still connect themselves.
     property var removingDevices: ({})
+    property BluetoothDevice pairTarget: null
+    property var linkSeen: ({})
+    property int audioGraceMs: 5000
     property int removalHideDurationMs: 10000
-    property var rememberedDevices: []
     property var deviceVolumes: ({})
-    property var reconnectBackoff: ({})   // address -> { next: ms timestamp, delay: ms }
     property bool stateLoaded: false
-    property bool reconnectPaused: false
     property string trackedSink: ""
     property real settleUntil: 0
     property int settleMs: 6000
@@ -60,8 +63,6 @@ Singleton {
                 if (s && typeof s === "object") {
                     if (s.removing && typeof s.removing === "object")
                         root.removingDevices = s.removing
-                    if (Array.isArray(s.devices))
-                        root.rememberedDevices = s.devices.filter(function (a) { return typeof a === "string" })
                     if (s.volumes && typeof s.volumes === "object")
                         root.deviceVolumes = s.volumes
                 }
@@ -84,28 +85,8 @@ Singleton {
         interval: 400
         onTriggered: stateFile.setText(JSON.stringify({
             removing: root.removingDevices,
-            devices: root.rememberedDevices,
             volumes: root.deviceVolumes
         }))
-    }
-
-    function remember(address) {
-        if (!address || root.rememberedDevices.indexOf(address) >= 0)
-            return
-        var list = root.rememberedDevices.slice()
-        list.push(address)
-        root.rememberedDevices = list
-        root.saveState()
-    }
-
-    function forget(address) {
-        var i = root.rememberedDevices.indexOf(address)
-        if (i < 0)
-            return
-        var list = root.rememberedDevices.slice()
-        list.splice(i, 1)
-        root.rememberedDevices = list
-        root.saveState()
     }
 
     function markRemoved(dev) {
@@ -117,52 +98,12 @@ Singleton {
         var updated = Object.assign({}, root.removingDevices)
         updated[key] = Date.now()
         root.removingDevices = updated
-        root.forget(dev.address)
         if (dev.address && root.deviceVolumes[dev.address] !== undefined) {
             var vols = Object.assign({}, root.deviceVolumes)
             delete vols[dev.address]
             root.deviceVolumes = vols
         }
         root.saveState()
-    }
-
-    function syncConnected() {
-        if (!root.stateLoaded)
-            return
-        var devs = root.deviceList()
-        for (var i = 0; i < devs.length; i++) {
-            if (devs[i].state === BluetoothDeviceState.Connected && devs[i].address)
-                root.remember(devs[i].address)
-        }
-    }
-
-    function reconnectRemembered() {
-        if (!root.stateLoaded || !root.adapter || !root.powered || root.reconnectPaused)
-            return
-        var now = Date.now()
-        var devs = root.deviceList()
-        for (var i = 0; i < devs.length; i++) {
-            var d = devs[i]
-            if (!d.address || root.rememberedDevices.indexOf(d.address) < 0)
-                continue
-            if (d.state === BluetoothDeviceState.Connected) {
-                delete root.reconnectBackoff[d.address]
-                continue
-            }
-            if (root.removingDevices[d.address])
-                continue
-            if (d.pairing)
-                continue
-            if (d.state !== BluetoothDeviceState.Disconnected)
-                continue
-            var b = root.reconnectBackoff[d.address]
-            if (b && now < b.next)
-                continue
-            var delay = b ? Math.min(b.delay * 2, 60000) : 10000
-            root.reconnectBackoff[d.address] = { next: now + delay, delay: delay }
-            d.trusted = true
-            d.connect()
-        }
     }
 
     function pruneRemovingDevices() {
@@ -248,12 +189,91 @@ Singleton {
         onTriggered: root.volumeTick()
     }
 
+    // No pairing agent is registered, and without one BlueZ leaves the adapter non-bondable:
+    // pairings then work for one session but are never saved, so the device has to be
+    // re-paired next time. Keep it bondable whenever it's on.
+    function keepBondable() {
+        if (root.adapter && root.adapter.enabled && !root.adapter.pairable)
+            root.adapter.pairable = true
+    }
+
+    onAdapterChanged: keepBondable()
+    Component.onCompleted: keepBondable()
+
+    Connections {
+        target: root.adapter
+        function onEnabledChanged() { root.keepBondable() }
+    }
+
+    // Connect from Settings on a device that isn't paired yet: pair first so the bond is
+    // saved, then connect once pairing finishes.
+    function pairThenConnect(dev) {
+        root.keepBondable()
+        root.pairTarget = dev
+        dev.pair()
+    }
+
+    Connections {
+        target: root.pairTarget
+        function onPairingChanged() {
+            if (!root.pairTarget.pairing)
+                pairDone.restart()
+        }
+    }
+
     Timer {
-        interval: 5000
-        running: root.stateLoaded && root.powered && !root.reconnectPaused
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: root.reconnectRemembered()
+        id: pairDone
+        interval: 500
+        onTriggered: {
+            var dev = root.pairTarget
+            root.pairTarget = null
+            if (dev && dev.paired)
+                root.connectProfiles(dev)
+        }
+    }
+
+    // BluetoothDevice.connect() refuses once the link is up ("already connected"), which it is
+    // after pairing or when the device connected itself. BlueZ's Device1.Connect still connects
+    // the profiles that are missing.
+    function connectProfiles(dev) {
+        Quickshell.execDetached(["busctl", "call", "--timeout=30", "org.bluez", dev.dbusPath,
+                                 "org.bluez.Device1", "Connect"])
+    }
+
+    function hasAudioNode(address) {
+        var key = address.toUpperCase().replace(/:/g, "_")
+        var nodes = Pipewire.nodes.values
+        for (var i = 0; i < nodes.length; i++) {
+            if (!nodes[i].isStream && nodes[i].name && nodes[i].name.toUpperCase().indexOf(key) >= 0)
+                return true
+        }
+        return false
+    }
+
+    // A paired audio device that connects itself (AirPods do when the case opens) can bring up
+    // just the link and no audio profiles, which leaves no output to pick. Finish connecting its
+    // profiles once per connection. This only acts on a link the device already opened.
+    function completeAudioLinks() {
+        if (!Pipewire.ready)
+            return
+        var now = Date.now()
+        var seen = ({})
+        var devs = root.deviceList()
+
+        for (var i = 0; i < devs.length; i++) {
+            var d = devs[i]
+            if (!d.address || d.state !== BluetoothDeviceState.Connected)
+                continue
+            var entry = root.linkSeen[d.address] || { since: now, done: false }
+            seen[d.address] = entry
+
+            if (entry.done || now - entry.since < root.audioGraceMs)
+                continue
+            entry.done = true
+            if (d.bonded && (d.icon || "").indexOf("audio") === 0 && !root.hasAudioNode(d.address))
+                root.connectProfiles(d)
+        }
+        root.linkSeen = seen
     }
 
     Timer {
@@ -262,17 +282,7 @@ Singleton {
         repeat: true
         onTriggered: {
             root.pruneRemovingDevices()
-            root.syncConnected()
-        }
-    }
-
-    Connections {
-        target: root.adapter
-        function onEnabledChanged() {
-            root.reconnectBackoff = ({})
-            if (root.adapter && root.adapter.enabled)
-                root.reconnectPaused = false
-            root.reconnectRemembered()
+            root.completeAudioLinks()
         }
     }
 }

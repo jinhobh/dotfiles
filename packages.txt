@@ -69,7 +69,9 @@ wl-clipboard
 # Terminal / Shell
 # --------------------------------------------------
 
+ghostty
 kitty
+neovim
 zsh
 zsh-autosuggestions
 zsh-syntax-highlighting

@@ -437,16 +437,19 @@ Item {
                     width: 150
                     height: 150
 
-                    Image {
+                    FileView {
+                        id: asciiFile
+                        path: page.homeDir ? page.homeDir + "/.config/fastfetch/ascii.txt" : ""
+                    }
+
+                    Text {
                         anchors.centerIn: parent
-                        source: page.homeDir ? "file://" + page.homeDir + "/.config/quickshell/imgs/pfp3.png" : ""
-                        width: 140
-                        height: 140
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        mipmap: true
-                        asynchronous: true
-                        opacity: Theme.bg.a
+                        text: asciiFile.text()
+                        font.family: page.mono
+                        font.pixelSize: 4
+                        lineHeight: 0.95
+                        textFormat: Text.PlainText
+                        color: Theme.text
                     }
                 }
 

@@ -270,7 +270,9 @@ Scope {
             id: im
             anchors.fill: parent
             fillMode: Image.PreserveAspectCrop
-            asynchronous: true
+            // image://icon goes through QIcon theme lookup, which isn't thread-safe;
+            // loading it on the async reader thread segfaults in QIcon::pixmap
+            asynchronous: !th.src.startsWith("image://")
             // decode at display size (2x for HiDPI) instead of full resolution
             sourceSize: Qt.size(th.width * 2, th.height * 2)
             source: th.src

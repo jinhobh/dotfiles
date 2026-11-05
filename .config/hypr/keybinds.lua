@@ -6,7 +6,7 @@
 local home = os.getenv("HOME")
 local menu = "rofi -show drun"
 
-hl.bind(mainMod .. " + T", hl.dsp.exec_cmd(terminal)) 
+hl.bind(mainMod .. " + X", hl.dsp.exec_cmd(terminal)) 
 hl.bind(mainMod .. " + D", hl.dsp.exec_cmd("pgrep -x rofi >/dev/null && pkill -x rofi || " .. menu)) -- Toggle launcher
 hl.bind(mainMod .. " + S", hl.dsp.exec_cmd("qs ipc call wheel toggle")) -- Wheel launcher
 hl.bind(mainMod .. " + E", hl.dsp.exec_cmd(fileManager))
@@ -19,7 +19,7 @@ hl.bind(mainMod .. " + GRAVE", hl.dsp.exec_cmd("qs ipc call powermenu toggle")) 
 
 hl.bind(mainMod .. " + I", hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Settings
 
-hl.bind(mainMod .. " + W", hl.dsp.exec_cmd("qs -n -p ~/.config/quickshell/hyprquickpaper")) -- Wallpapers
+hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("qs -n -p ~/.config/quickshell/hyprquickpaper")) -- Wallpapers
 
 hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ mode = 0 })) -- Fullscreen
 
@@ -41,9 +41,9 @@ hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("qs ipc call bar toggle")) --
 hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("pgrep -x rofi >/dev/null && pkill -x rofi || cliphist list | rofi -dmenu -p '' | cliphist decode | wl-copy"))
 
 -- Screenshot fullscreen
-hl.bind("Delete", hl.dsp.exec_cmd("sh -c 'file=" .. home .. "/Pictures/$(date +%s).png; grim \"$file\"; wl-copy < \"$file\"; qs ipc call screenshot notify \"$file\"'"))
+hl.bind(mainMod .. " + SHIFT + Delete", hl.dsp.exec_cmd("sh -c 'file=" .. home .. "/Pictures/Screenshots/$(date +%s).png; grim \"$file\"; wl-copy < \"$file\"; qs ipc call screenshot notify \"$file\"'"))
 -- Screenshot area select
-hl.bind("SHIFT + Delete", hl.dsp.exec_cmd("sh -c 'file=" .. home .. "/Pictures/$(date +%s).png; grim -g \"$(slurp)\" \"$file\"; wl-copy < \"$file\"; qs ipc call screenshot notify \"$file\"'"))
+hl.bind(mainMod .. " + Delete", hl.dsp.exec_cmd("sh -c 'file=" .. home .. "/Pictures/Screenshots/$(date +%s).png; grim -g \"$(slurp)\" \"$file\"; wl-copy < \"$file\"; qs ipc call screenshot notify \"$file\"'"))
 
 -- Keyboard layout
 hl.bind(mainMod .. " + X", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"))
@@ -130,10 +130,10 @@ for i = 1, 10 do
     hl.bind(mainMod .. " + SHIFT + " .. key, hl.dsp.window.move({ workspace = i }))
 end
 
--- Touchpad: 4-finger vertical swipe moves between workspaces
+-- Touchpad: 3-finger vertical swipe moves between workspaces
 -- up = previous (2 -> 1), down = next (2 -> 3)
-hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.focus({ workspace = "e-1" })) end })
-hl.gesture({ fingers = 4, direction = "down", action = function() hl.dispatch(hl.dsp.focus({ workspace = "e+1" })) end })
+hl.gesture({ fingers = 3, direction = "up", action = function() hl.dispatch(hl.dsp.focus({ workspace = "e-1" })) end })
+hl.gesture({ fingers = 3, direction = "down", action = function() hl.dispatch(hl.dsp.focus({ workspace = "e+1" })) end })
 
 -- Media keys (confirmed pattern from the official example config)
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"), { locked = true, repeating = true })
