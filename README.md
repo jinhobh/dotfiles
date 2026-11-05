@@ -27,6 +27,11 @@ theme wallpaper ~/Pictures/Wallpapers/foo.jpg   # colors generated from the imag
 theme toggle                                    # light / dark
 ```
 
+### Wallpaper picker (`Super + P`)
+Scroll through your wallpapers and click one to apply it. The whole desktop then rethemes from the new image. In this clip the terminal background and the settings accents change to match.
+
+![Wallpaper picker](assets/wallpaper-picker.gif)
+
 ### Settings menu (`Super + I`)
 System stats, audio, display, network, bluetooth, storage, power, configs and themes.
 
