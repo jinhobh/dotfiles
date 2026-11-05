@@ -44,6 +44,16 @@ System stats, audio, display, network, bluetooth, storage, power, configs and th
   <img src="assets/powermenu.jpg" width="40%" alt="Power menu">
 </p>
 
+### Volume and brightness OSD
+A slider pops up under the bar when you change the volume (including mute) or the screen brightness.
+
+![Volume and brightness OSD](assets/osd.gif)
+
+### Media popup
+While music is playing, the track shows in the bar. Hover over it to open a card with the album art, a live visualizer and playback controls. The card closes when you move away. Works with Spotify and any other MPRIS player.
+
+![Media popup](assets/media-popup.gif)
+
 ## Features
 
 - **Top bar**: clock, media with a scrolling title (hover it for a popup), volume, battery, wifi, notifications. Right-click the clock for bar settings (position, style, modules).
