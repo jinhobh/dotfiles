@@ -126,6 +126,8 @@ cd dotfiles
 
 Log out and back in when it finishes. Put wallpapers in `~/Pictures/Wallpapers` and open the picker with `Super + P`.
 
+MP4 files in the same folder appear with still previews and play as muted, looping live wallpapers on all monitors when selected. Playback runs whenever at least one display shows an empty workspace, and pauses only when every display is occupied (including visible special workspaces). Playback uses `mpvpaper` and `ffmpeg` (included in `packages.txt`; existing installs can use `yay -S mpvpaper ffmpeg`). Selecting an image stops video playback. Live wallpapers restore after login, and desktop colors are generated from a video frame. Playback errors are logged in `~/.cache/43pr/video-wallpaper.log`.
+
 > [!important]
 > Configs are **symlinked** into `~/.config` from the cloned repo, so don't move or delete the repo afterwards. If you do move it, run `./install.sh` again to repoint the links.
 

@@ -11,4 +11,4 @@ for _ in {1..20}; do
     sleep 0.25
 done
 
-awww img "$img" -t none
+WALLPAPER_TRANSITION=none bash "$HOME/.config/quickshell/hyprquickpaper/commands.sh" "$img"

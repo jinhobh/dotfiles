@@ -8,8 +8,8 @@ import Quickshell.Wayland
 PanelWindow {
     id: main
     readonly property real ui: Screen.height / 1080
-    readonly property real refWidth: 1920
-    readonly property real refHeight: 500
+    readonly property real refWidth: 500
+    readonly property real refHeight: 1920
     property int speed: 5000
     property int animDuration: 1000
     property real zoomScale: 0.8
@@ -17,7 +17,8 @@ PanelWindow {
     property real skewFactor: 0
     property real baseSpacing: 0
     property real edgeSpacing: 80
-    property int startPosition: 4
+    property string currentWallpaper: ""
+    property bool wallpaperStateLoaded: false
     property bool shadowEnabled: true
     property color shadowColor: "#000000"
     property real shadowOpacity: 0.4
@@ -66,12 +67,32 @@ PanelWindow {
         }
     }
 
+    FileView {
+        path: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/43pr/state.json"
+        printErrors: false
+        onLoaded: {
+            try {
+                const state = JSON.parse(text())
+                main.currentWallpaper = state && typeof state.wallpaper === "string" ? state.wallpaper : ""
+            } catch (error) {
+                main.currentWallpaper = ""
+            }
+            main.wallpaperStateLoaded = true
+            Qt.callLater(list.centerOnStart)
+        }
+        onLoadFailed: {
+            main.wallpaperStateLoaded = true
+            Qt.callLater(list.centerOnStart)
+        }
+    }
+
     FolderListModel {
         id: folderModel
         folder: "file://" + main.wallpaperPath
         showDirs: false
-        nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif"]
+        nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif", "*.mp4"]
         sortField: FolderListModel.Name
+        onStatusChanged: Qt.callLater(list.centerOnStart)
     }
 
     MouseArea {
@@ -103,7 +124,7 @@ PanelWindow {
         }
 
         Text {
-            text: "Add images to:"
+            text: "Add images or MP4 videos to:"
             color: "#aaaaaa"
             font.pixelSize: 13 * main.ui
             anchors.horizontalCenter: parent.horizontalCenter
@@ -123,66 +144,86 @@ PanelWindow {
 
     ListView {
         id: list
-        width: parent.width
-        height: tileHeight
+        width: tileWidth
+        height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
         z: 1
         focus: true
         model: folderModel
-        orientation: ListView.Horizontal
+        orientation: ListView.Vertical
         spacing: 0
         clip: true
         cacheBuffer: 400 * main.ui
         boundsBehavior: Flickable.StopAtBounds
 
-        property int selectedIndex: main.startPosition
+        property int selectedIndex: -1
 
-        readonly property real tileHeight: main.refHeight * main.ui
-        readonly property real tileWidth: (main.refWidth / Math.max(1, configs.number_of_pictures) - 10) * main.ui
+        readonly property real tileWidth: main.refWidth * main.ui
+        readonly property real tileHeight: (main.refHeight / Math.max(1, configs.number_of_pictures) - 10) * main.ui
 
-        readonly property real viewportCenterX: width / 2
-        readonly property real falloffRadius: (main.refWidth / 2) * main.ui
+        readonly property real viewportCenterY: height / 2
+        readonly property real falloffRadius: height / 2
 
-        readonly property real step: tileWidth + main.baseSpacing * main.ui
-        readonly property real sideMargin: Math.max(0, viewportCenterX - tileWidth / 2)
+        readonly property real step: tileHeight + main.baseSpacing * main.ui
+        readonly property real sideMargin: Math.max(0, viewportCenterY - tileHeight / 2)
         property bool ready: false
         property bool userMoved: false
 
-        leftMargin: sideMargin
-        rightMargin: sideMargin
+        topMargin: sideMargin
+        bottomMargin: sideMargin
 
-        function clampIndex(i) { return Math.max(0, Math.min(i, count - 1)) }
-        function ensureVisibleAnimated(i) { contentX = i * step }
+        function clampIndex(i) { return count > 0 ? Math.max(0, Math.min(i, count - 1)) : -1 }
+        function ensureVisibleAnimated(i) { contentY = i * step - sideMargin }
 
         function centerOnStart() {
-            if (userMoved || count <= 0 || configs.number_of_pictures <= 0) return
-            selectedIndex = clampIndex(main.startPosition)
-            contentX = selectedIndex * step
-            ready = true
+            if (userMoved) {
+                selectedIndex = clampIndex(selectedIndex)
+                return
+            }
+            if (!main.wallpaperStateLoaded || folderModel.status !== FolderListModel.Ready
+                    || configs.number_of_pictures <= 0 || height <= 0) return
+
+            let startIndex = clampIndex(0)
+            if (main.currentWallpaper !== "") {
+                for (let i = 0; i < count; ++i) {
+                    if (folderModel.get(i, "filePath") === main.currentWallpaper) {
+                        startIndex = i
+                        break
+                    }
+                }
+            }
+            // Jump directly to the initial wallpaper, without animating from the first item.
+            ready = false
+            selectedIndex = startIndex
+            if (selectedIndex >= 0) contentY = selectedIndex * step - sideMargin
+            ready = count > 0
         }
 
         function activateCurrent() {
+            if (selectedIndex < 0 || selectedIndex >= count) return
             Quickshell.execDetached(["bash", Quickshell.shellPath("commands.sh"), folderModel.get(selectedIndex, "filePath")])
             Qt.quit()
         }
 
         function moveSelection(delta, speedMultiplier) {
+            if (count <= 0) return
             anim.velocity = main.speed * speedMultiplier
             selectedIndex = clampIndex(selectedIndex + delta)
             ensureVisibleAnimated(selectedIndex)
         }
 
         onCountChanged: centerOnStart()
-        onWidthChanged: centerOnStart()
-        onTileWidthChanged: centerOnStart()
+        onHeightChanged: centerOnStart()
+        onTileHeightChanged: centerOnStart()
+        onMovementStarted: userMoved = true
 
         Connections {
             target: configs
             function onNumber_of_picturesChanged() { list.centerOnStart() }
         }
 
-        Behavior on contentX {
+        Behavior on contentY {
             enabled: list.ready
             SmoothedAnimation { id: anim; property real velocity: main.speed; duration: main.animDuration }
         }
@@ -193,14 +234,14 @@ PanelWindow {
             height: list.tileHeight
 
             property bool active: index === list.selectedIndex
-            readonly property real baseWidth: list.tileWidth
-            readonly property real baseCenterX: x - list.contentX + baseWidth / 2
-            readonly property real distance: Math.abs(baseCenterX - list.viewportCenterX)
+            readonly property real baseHeight: list.tileHeight
+            readonly property real baseCenterY: y - list.contentY + baseHeight / 2
+            readonly property real distance: Math.abs(baseCenterY - list.viewportCenterY)
             readonly property real fraction: Math.min(1, distance / list.falloffRadius)
             readonly property real compression: { const t = fraction; return t * t * t * t }
             readonly property real edgeOffset: {
                 const amount = main.edgeSpacing * main.ui * compression
-                return baseCenterX < list.viewportCenterX ? amount : -amount
+                return baseCenterY < list.viewportCenterY ? amount : -amount
             }
             readonly property real scaleFactor: {
                 const t = 1 - fraction * fraction * (3 - 2 * fraction)
@@ -209,10 +250,10 @@ PanelWindow {
 
             Item {
                 id: content
-                anchors.verticalCenter: parent.verticalCenter
-                width: delegateItem.baseWidth * delegateItem.scaleFactor
-                height: delegateItem.height * Math.min(1, delegateItem.scaleFactor)
-                x: (delegateItem.baseWidth - width) / 2 + delegateItem.edgeOffset
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: delegateItem.width * Math.min(1, delegateItem.scaleFactor)
+                height: delegateItem.baseHeight * delegateItem.scaleFactor
+                y: (delegateItem.baseHeight - height) / 2 + delegateItem.edgeOffset
 
                 Image {
                     id: shadowImage
@@ -251,8 +292,8 @@ PanelWindow {
                     asynchronous: true
                     cache: false
                     smooth: true
-                    source: "file://" + main.cachePath + encodeURIComponent(fileName)
-                    sourceSize.width: delegateItem.baseWidth * main.zoomScale
+                    source: "file://" + main.cachePath + encodeURIComponent(fileName + (fileName.toLowerCase().endsWith(".mp4") ? ".jpg" : ""))
+                    sourceSize.width: delegateItem.width * main.zoomScale
                     sourceSize.height: delegateItem.height
                     transform: Shear { xFactor: main.skewFactor }
 
@@ -265,6 +306,7 @@ PanelWindow {
 
                     onStatusChanged: {
                         if (status === Image.Error) { alt.text = "Caching"; retryTimer.start() }
+                        else if (status === Image.Ready) { alt.text = "" }
                     }
                 }
 
@@ -284,12 +326,16 @@ PanelWindow {
                 hoverEnabled: list.ready
                 onEntered: { list.userMoved = true; list.selectedIndex = index }
                 onClicked: list.activateCurrent()
-                onWheel: function(wheel) { list.flick(-wheel.angleDelta.y * 8, 0); wheel.accepted = true }
+                onWheel: function(wheel) { list.userMoved = true; list.flick(0, wheel.angleDelta.y * 8); wheel.accepted = true }
             }
         }
 
         Keys.onPressed: function(event) {
-            if (event.key === Qt.Key_Space) {
+            if (event.key === Qt.Key_Down) {
+                userMoved = true; moveSelection(1, 1)
+            } else if (event.key === Qt.Key_Up) {
+                userMoved = true; moveSelection(-1, 1)
+            } else if (event.key === Qt.Key_Space) {
                 activateCurrent()
             } else if (event.key === Qt.Key_W || event.key === Qt.Key_Escape) {
                 Qt.quit()

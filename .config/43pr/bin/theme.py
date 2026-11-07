@@ -29,7 +29,7 @@ GTK_THEME_LIGHT = "Adwaita"
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 TOKEN = re.compile(r"\{\{\s*([A-Za-z0-9_]+)((?:\s*\|\s*[a-z0-9]+(?:=[0-9a-fA-Fx.]+)?)*)\s*\}\}")
-IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".mp4"}
 
 
 def die(msg):
@@ -233,6 +233,16 @@ def probe_scheme_type(path):
 def from_wallpaper(path):
     if not shutil.which("matugen"):
         raise RuntimeError("matugen is not installed")
+
+    if Path(path).suffix.lower() == ".mp4":
+        # Keep the video itself in state; use a still only for color extraction.
+        CACHE.mkdir(parents=True, exist_ok=True)
+        frame = CACHE / "video-theme-frame.jpg"
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(path),
+             "-frames:v", "1", "-vf", "scale=-2:500", str(frame)],
+            check=True, capture_output=True, timeout=60)
+        path = frame
 
     scheme_type = os.environ.get("MATUGEN_TYPE") or probe_scheme_type(path)
 
